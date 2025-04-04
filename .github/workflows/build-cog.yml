@@ -23,10 +23,32 @@ jobs:
       - name: Install Cog
         run: sudo curl -o /usr/local/bin/cog -L https://github.com/replicate/cog/releases/latest/download/cog_`uname -s`_`uname -m` && sudo chmod +x /usr/local/bin/cog
 
-      - name: Build Cog model image
-        # This command executes the build process defined in cog.yaml,
-        # including the nvcc compilation step inside the build container.
-        # The tag here is mostly for local reference during the build.
+      - name: Explicitly Compile CUDA Kernel (for debugging)
+        # Run nvcc separately to see detailed output
+        # We need to simulate the Cog build environment closely
+        # 1. Find the CUDA version Cog would use (e.g., 11.8 from cog.yaml)
+        # 2. Use a base image with that CUDA toolkit
+        # For simplicity here, we assume nvcc is available on the runner PATH via Cog's setup or a base image.
+        # If this fails due to nvcc not found, we might need a more complex setup using a specific Docker container.
+        working-directory: ./core/cuda # Change to the cuda directory
+        run: |
+          echo "Attempting to compile CUDA kernel..."
+          nvcc --ptx -arch=sm_70 -O3 -I./cuda-ecc-ed25519 --std=c++11 vanity_generator.cu -o kernel.ptx > nvcc_stdout.log 2> nvcc_stderr.log || true
+          echo "--- NVCC STDOUT ---"
+          cat nvcc_stdout.log
+          echo "--- NVCC STDERR ---"
+          cat nvcc_stderr.log
+          # Check if compilation failed (exit code != 0) by checking stderr log size or specific error patterns if needed
+          if [ -s nvcc_stderr.log ]; then
+            echo "NVCC compilation failed. See errors above."
+            exit 1 # Fail the workflow step
+          fi
+          echo "NVCC compilation successful (kernel.ptx created)."
+        # Note: The || true prevents the step from failing immediately on nvcc error,
+        # allowing us to cat the logs. We explicitly fail later if stderr is not empty.
+
+      - name: Build Cog model image (uses pre-compiled kernel.ptx)
+        # This command now expects kernel.ptx to exist from the previous step
         run: cog build -t solvanitycl-temp-build # Use a temporary tag
 
       - name: Log in to Replicate
