@@ -47,6 +47,16 @@ jobs:
           fi
           echo "NVCC compilation successful (kernel.ptx created in ./core/cuda/)."
 
+      - name: Verify kernel.ptx exists
+        run: |
+          echo "Checking for kernel.ptx in ${{ github.workspace }}/core/cuda ..."
+          ls -l ${{ github.workspace }}/core/cuda/kernel.ptx
+          if [ ! -f ${{ github.workspace }}/core/cuda/kernel.ptx ]; then
+            echo "ERROR: kernel.ptx not found after compilation step!"
+            exit 1
+          fi
+          echo "kernel.ptx found."
+
       - name: Build Cog model image (uses pre-compiled kernel.ptx)
         # This command now expects kernel.ptx to exist from the previous step
         run: cog build -t solvanitycl-temp-build # Use a temporary tag
