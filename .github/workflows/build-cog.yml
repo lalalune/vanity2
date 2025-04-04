@@ -23,29 +23,29 @@ jobs:
       - name: Install Cog
         run: sudo curl -o /usr/local/bin/cog -L https://github.com/replicate/cog/releases/latest/download/cog_`uname -s`_`uname -m` && sudo chmod +x /usr/local/bin/cog
 
-      - name: Explicitly Compile CUDA Kernel (for debugging)
-        # Run nvcc separately to see detailed output
-        # We need to simulate the Cog build environment closely
-        # 1. Find the CUDA version Cog would use (e.g., 11.8 from cog.yaml)
-        # 2. Use a base image with that CUDA toolkit
-        # For simplicity here, we assume nvcc is available on the runner PATH via Cog's setup or a base image.
-        # If this fails due to nvcc not found, we might need a more complex setup using a specific Docker container.
-        working-directory: ./core/cuda # Change to the cuda directory
+      - name: Explicitly Compile CUDA Kernel using Docker
+        # Use a Docker container with the correct CUDA toolkit version
+        # Mount the workspace to access source code and output the PTX file
         run: |
-          echo "Attempting to compile CUDA kernel..."
-          nvcc --ptx -arch=sm_70 -O3 -I./cuda-ecc-ed25519 --std=c++11 vanity_generator.cu -o kernel.ptx > nvcc_stdout.log 2> nvcc_stderr.log || true
-          echo "--- NVCC STDOUT ---"
-          cat nvcc_stdout.log
-          echo "--- NVCC STDERR ---"
-          cat nvcc_stderr.log
-          # Check if compilation failed (exit code != 0) by checking stderr log size or specific error patterns if needed
-          if [ -s nvcc_stderr.log ]; then
+          echo "Attempting to compile CUDA kernel using Docker..."
+          docker run --rm \
+            -v ${{ github.workspace }}/core/cuda:/workdir \
+            nvidia/cuda:11.8.0-devel-ubuntu22.04 \
+            sh -c "nvcc --ptx -arch=sm_70 -O3 -I./cuda-ecc-ed25519 --std=c++11 vanity_generator.cu -o kernel.ptx > nvcc_stdout.log 2> nvcc_stderr.log" || true
+
+          echo "--- NVCC STDOUT (from container) ---"
+          # Need to check if the file exists inside the container or output dir
+          # Since we mounted, the logs *should* be in the host dir now
+          cat ${{ github.workspace }}/core/cuda/nvcc_stdout.log || echo "stdout log not found"
+          echo "--- NVCC STDERR (from container) ---"
+          cat ${{ github.workspace }}/core/cuda/nvcc_stderr.log || echo "stderr log not found"
+
+          # Check if compilation failed (stderr log has content)
+          if [ -s ${{ github.workspace }}/core/cuda/nvcc_stderr.log ]; then
             echo "NVCC compilation failed. See errors above."
             exit 1 # Fail the workflow step
           fi
-          echo "NVCC compilation successful (kernel.ptx created)."
-        # Note: The || true prevents the step from failing immediately on nvcc error,
-        # allowing us to cat the logs. We explicitly fail later if stderr is not empty.
+          echo "NVCC compilation successful (kernel.ptx created in ./core/cuda/)."
 
       - name: Build Cog model image (uses pre-compiled kernel.ptx)
         # This command now expects kernel.ptx to exist from the previous step
