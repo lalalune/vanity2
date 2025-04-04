@@ -1,0 +1,6 @@
+cog
+loguru
+pyopencl
+base58
+PyNaCl
+numpy==1.26.4

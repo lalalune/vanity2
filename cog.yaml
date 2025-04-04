@@ -1,0 +1,26 @@
+build:
+  gpu: true
+  cuda: "11.8"
+  python_version: "3.10"
+  system_packages:
+    - build-essential
+    - curl
+    - pkg-config
+    - libssl-dev
+  python_packages:
+    - "numpy==1.26.4"
+    - "base58"
+    - "PyNaCl"
+    - "loguru"
+    - "cog"
+    - "cupy-cuda11x"
+    - "solders"
+  run:
+    # Pre-compile the CUDA kernel during build time
+    # Ensure paths are relative to the build context root (/src)
+    - "cd /src/core/cuda && nvcc --ptx -arch=sm_70 -O3 -I./cuda-ecc-ed25519 --std=c++11 vanity_generator.cu -o kernel.ptx"
+
+predict: "predict.py:Predictor"
+
+# This defines where the model will be pushed
+image: "r8.im/lalalune/vanity-keypairs" 

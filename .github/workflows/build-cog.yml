@@ -1,0 +1,40 @@
+name: Build and Push Cog Model to Replicate
+
+on:
+  push:
+    branches: [ main ] # Trigger on pushes to the main branch
+  workflow_dispatch: # Allows manual triggering from GitHub UI
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest # Use a standard Linux runner
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      # NOTE: Setting up Docker/Buildx is often needed for advanced builds,
+      # but Cog typically handles this internally if docker is available.
+      # If issues arise, consider adding Docker setup steps like:
+      # - name: Set up QEMU
+      #   uses: docker/setup-qemu-action@v3
+      # - name: Set up Docker Buildx
+      #   uses: docker/setup-buildx-action@v3
+
+      - name: Install Cog
+        run: sudo curl -o /usr/local/bin/cog -L https://github.com/replicate/cog/releases/latest/download/cog_`uname -s`_`uname -m` && sudo chmod +x /usr/local/bin/cog
+
+      - name: Build Cog model image
+        # This command executes the build process defined in cog.yaml,
+        # including the nvcc compilation step inside the build container.
+        # The tag here is mostly for local reference during the build.
+        run: cog build -t solvanitycl-temp-build # Use a temporary tag
+
+      - name: Log in to Replicate
+        # Use the REPLICATE_API_TOKEN secret stored in GitHub repo settings
+        if: github.event_name == 'push' # Only login/push on actual push events
+        run: echo "${{ secrets.REPLICATE_API_TOKEN }}" | cog login
+
+      - name: Push image to Replicate
+        # Cog push reads the destination from the 'image:' field in cog.yaml
+        if: github.event_name == 'push' # Only login/push on actual push events
+        run: cog push
